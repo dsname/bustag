@@ -1,5 +1,6 @@
 from collections import defaultdict
 import threading
+import traceback
 import sys
 import os
 import bottle
@@ -29,6 +30,14 @@ def send_static(filepath):
     return static_file(filepath, root=dirname+'/static/')
 
 
+def _remove_extra_tags(item):
+    limit = 10
+    tags_dict = item.tags_dict
+    tags = ['genre', 'star']
+    for t in tags:
+        tags_dict[t] = tags_dict[t][:limit]
+
+
 @route('/')
 def index():
     rate_type = RATE_TYPE.SYSTEM_RATE.value
@@ -36,7 +45,8 @@ def index():
     page = int(request.query.get('page', 1))
     items, page_info = get_items(
         rate_type=rate_type, rate_value=rate_value, page=page)
-
+    for item in items:
+        _remove_extra_tags(item)
     today_update_count = db.get_today_update_count()
     today_recommend_count = db.get_today_recommend_count()
     msg = f'今日更新 {today_update_count} , 今日推荐 {today_recommend_count}'
@@ -54,7 +64,8 @@ def tagit():
     page = int(request.query.get('page', 1))
     items, page_info = get_items(
         rate_type=rate_type, rate_value=rate_value, page=page)
-
+    for item in items:
+        _remove_extra_tags(item)
     return template('tagit', items=items, page_info=page_info, like=rate_value, path=request.path)
 
 
@@ -146,8 +157,9 @@ def update_local_fanhao():
 def local():
     page = int(request.query.get('page', 1))
     items, page_info = get_local_items(page=page)
-    for item in items:
-        LocalItem.loadit(item)
+    for local_item in items:
+        LocalItem.loadit(local_item)
+        _remove_extra_tags(local_item.item)
     return template('local', items=items, page_info=page_info, path=request.path)
 
 
@@ -214,8 +226,10 @@ if __name__ == "__main__":
         from bustag.spider import bus_spider
         from bustag.app.local import add_local_fanhao, load_tags_db
         start_app()
-    except:
+    except Exception as e:
         print('system error')
+        traceback.print_exc()
     finally:
         print("Press Enter to continue ...")
         input()
+        os._exit(1)
